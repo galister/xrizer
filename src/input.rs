@@ -1275,11 +1275,13 @@ impl<C: openxr_data::Compositor> Input<C> {
     pub fn frame_start_update(&self) {
         tracy_span!();
         let data = self.openxr.session_data.get();
-        let devices = data.input_data.devices.read().unwrap();
+        let mut devices = data.input_data.devices.write().unwrap();
 
         devices.iter().for_each(|device| {
             device.clear_pose_cache();
         });
+
+        devices.create_generic_trackers(&self.openxr).unwrap();
 
         let left_hand = devices.get_controller(Hand::Left);
         let right_hand = devices.get_controller(Hand::Right);
