@@ -9,7 +9,7 @@ use std::{
 use openvr as vr;
 use openxr as xr;
 
-use crate::{input::profiles::vive_tracker::ViveTracker, tracy_span};
+use crate::tracy_span;
 use crate::{
     openxr_data::{self, AtomicPath, Hand, OpenXrData, SessionData},
     runtime_extensions::mndx_xdev_space::Xdev,
@@ -91,71 +91,6 @@ impl XrTrackedDevice {
         };
 
         *pose_cache
-    }
-
-    fn get_string_property(
-        &self,
-        prop: vr::ETrackedDeviceProperty,
-    ) -> Option<&'static CStr> {
-
-        match self.device_type {
-            TrackedDeviceType::Hmd => match prop {
-                // The Unity OpenVR sample appears to have a hard requirement on these first three properties returning
-                // something to even get the game to recognize the HMD's location. However, the value
-                // itself doesn't appear to be that important.
-                vr::ETrackedDeviceProperty::SerialNumber_String
-                | vr::ETrackedDeviceProperty::ManufacturerName_String
-                | vr::ETrackedDeviceProperty::ControllerType_String => Some(c"<unknown>"),
-                _ => None,
-            },
-            TrackedDeviceType::Controller { hand } => {
-                let profile = self.interaction_profile.lock().ok()?;
-                let data = profile.as_ref()?.properties();
-
-                match prop {
-                    // Audica likes to apply controller specific tweaks via this property
-                    vr::ETrackedDeviceProperty::ControllerType_String => {
-                        Some(data.openvr_controller_type)
-                    }
-                    // I Expect You To Die 3 identifies controllers with this property -
-                    // why it couldn't just use ControllerType instead is beyond me...
-                    vr::ETrackedDeviceProperty::ModelNumber_String => Some(data.model),
-                    // Resonite won't recognize controllers without this
-                    vr::ETrackedDeviceProperty::RenderModelName_String => {
-                        Some(*data.render_model_name.get(hand))
-                    }
-                    // Required for controllers to be acknowledged in I Expect You To Die 3
-                    vr::ETrackedDeviceProperty::SerialNumber_String
-                    | vr::ETrackedDeviceProperty::ManufacturerName_String => Some(c"<unknown>"),
-                    _ => None,
-                }
-            },
-            TrackedDeviceType::GenericTracker => {
-                let profile = self.interaction_profile.lock().ok()?;
-                let data = profile.as_ref()?.properties();
-
-                let serial = self.xdev.as_ref()?.properties.serial();
-                let c = unsafe { CStr::from_ptr(serial.as_bytes().as_ptr() as *const i8) };
-
-                match prop {
-                    // Audica likes to apply controller specific tweaks via this property
-                    vr::ETrackedDeviceProperty::ControllerType_String => {
-                        Some(data.openvr_controller_type)
-                    }
-                    // I Expect You To Die 3 identifies controllers with this property -
-                    // why it couldn't just use ControllerType instead is beyond me...
-                    vr::ETrackedDeviceProperty::ModelNumber_String => Some(data.model),
-                    // Resonite won't recognize controllers without this
-                    vr::ETrackedDeviceProperty::RenderModelName_String => {
-                        Some(*data.render_model_name.get(Hand::Left))
-                    }
-                    // Required for controllers to be acknowledged in I Expect You To Die 3
-                    vr::ETrackedDeviceProperty::SerialNumber_String => Some(c),
-                    vr::ETrackedDeviceProperty::ManufacturerName_String => Some(c"<unknown>"),
-                    _ => None,
-                }
-            }
-        }
     }
 
     pub fn connected(&self) -> bool {
@@ -396,7 +331,7 @@ impl TrackedDeviceList {
             let tracker = XrTrackedDevice::new(TrackedDeviceCreateInfo {
                 device_type: TrackedDeviceType::GenericTracker,
                 profile_path: None,
-                interaction_profile: Some(&ViveTracker),
+                interaction_profile: None,
                 xdev: Some(xdev),
             });
 
@@ -442,18 +377,6 @@ impl<C: openxr_data::Compositor> Input<C> {
                     .unwrap_or_default();
             }
         });
-    }
-
-    pub fn get_device_string_property(
-        &self,
-        index: vr::TrackedDeviceIndex_t,
-        property: vr::ETrackedDeviceProperty,
-    ) -> Option<&'static CStr> {
-        let session = self.openxr.session_data.get();
-        let devices = session.input_data.devices.read().ok()?;
-        let device = devices.get_device(index)?;
-
-        device.get_string_property(property)
     }
 
     pub fn get_controller_pose(
