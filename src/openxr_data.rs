@@ -123,6 +123,17 @@ impl<C: Compositor> OpenXrData<C> {
         exts.khr_composition_layer_color_scale_bias =
             supported_exts.khr_composition_layer_color_scale_bias;
 
+        //TODO: name from header
+        let mndx_bypass_action_set_priorities = "MNDX_bypass_action_set_priorities".to_string();
+        if supported_exts.ext_active_action_set_priority
+            && supported_exts
+                .other
+                .contains(&mndx_bypass_action_set_priorities)
+        {
+            exts.ext_active_action_set_priority = true;
+            exts.other.push(mndx_bypass_action_set_priorities);
+        }
+
         let instance = entry
             .create_instance(
                 &xr::ApplicationInfo {
