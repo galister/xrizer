@@ -576,6 +576,7 @@ impl OwnedRenderModel {
                     let poly_indices = &poly.0;
 
                     if poly_indices.len() < 3 {
+                        warn!("Discarding polygon with less than 3 indices.");
                         continue;
                     }
 
@@ -594,21 +595,16 @@ impl OwnedRenderModel {
 
                         if flipped {
                             // reverse winding to keep normals/front-faces correct
-                            indices.push(i0);
-                            indices.push(i2);
-                            indices.push(i1);
+                            indices.extend([i0, i2, i1]);
                         } else {
-                            indices.push(i0);
-                            indices.push(i1);
-                            indices.push(i2);
+                            indices.extend([i0, i1, i2]);
                         }
                     }
                 }
             }
         }
 
-        // calculate normals
-        let mut accum = vec![Vec3::ZERO; verts.len()];
+        let mut normals = vec![Vec3::ZERO; verts.len()];
 
         for tri in indices.chunks_exact(3) {
             let ia = tri[0] as usize;
@@ -627,12 +623,12 @@ impl OwnedRenderModel {
                 continue;
             }
 
-            accum[ia] += n;
-            accum[ib] += n;
-            accum[ic] += n;
+            normals[ia] += n;
+            normals[ib] += n;
+            normals[ic] += n;
         }
 
-        for (v, n) in verts.iter_mut().zip(accum.into_iter()) {
+        for (v, n) in verts.iter_mut().zip(normals.into_iter()) {
             let n = if n.length_squared() > 0.0 {
                 n.normalize()
             } else {
