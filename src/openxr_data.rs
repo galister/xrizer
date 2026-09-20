@@ -107,8 +107,12 @@ fn make_version() -> u32 {
 
 impl<C: Compositor> OpenXrData<C> {
     pub fn new(injector: &Injector) -> Result<Self, InitError> {
-        #[cfg(not(test))]
+        #[cfg(all(not(test), feature = "static-openxr"))]
         let entry = xr::Entry::linked();
+
+        #[cfg(all(not(test), not(feature = "static-openxr")))]
+        let entry = unsafe { xr::Entry::load() }
+            .expect("Failed to load OpenXR loader — is libopenxr-loader installed?");
 
         #[cfg(test)]
         let entry =
@@ -130,6 +134,7 @@ impl<C: Compositor> OpenXrData<C> {
             supported_exts.khr_composition_layer_color_scale_bias;
         exts.htc_vive_focus3_controller_interaction =
             supported_exts.htc_vive_focus3_controller_interaction;
+        exts.meta_touch_controller_plus = supported_exts.meta_touch_controller_plus;
         exts.fb_display_refresh_rate = supported_exts.fb_display_refresh_rate;
 
         // Extension that enables simple full body tracking support via generic tracked devices.
@@ -137,10 +142,10 @@ impl<C: Compositor> OpenXrData<C> {
         #[cfg(feature = "monado")]
         if supported_exts
             .other
-            .contains(&XR_MNDX_XDEV_SPACE_EXTENSION_NAME.to_string())
+            .contains(&[XR_MNDX_XDEV_SPACE_EXTENSION_NAME.as_bytes(), b"\0"].concat())
         {
             exts.other
-                .push(XR_MNDX_XDEV_SPACE_EXTENSION_NAME.to_string());
+                .push([XR_MNDX_XDEV_SPACE_EXTENSION_NAME.as_bytes(), b"\0"].concat());
         }
 
         let instance = entry
@@ -668,7 +673,7 @@ impl SessionData {
 }
 
 #[repr(u32)]
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Hand {
     Left = 1,
     Right,

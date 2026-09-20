@@ -97,6 +97,9 @@
 					"inputs": {
 						"click": {
 							"output": "/actions/set1/in/boolact"
+						},
+						"touch": {
+							"output": "/actions/set1/in/boolact"
 						}
 					},
 					"parameters": {},
@@ -248,6 +251,15 @@
 				},
 				{
 					"inputs": {
+						"scroll": {
+							"output": "/actions/set1/in/scrollact"
+						}
+					},
+					"mode": "scroll",
+					"path": "/user/hand/left/input/thumbstick"
+				},
+				{
+					"inputs": {
 						"position": {
 							"output": "/actions/set1/in/vec2act"
 						}
@@ -266,6 +278,18 @@
 					},
 					"mode": "joystick",
 					"path": "/user/hand/right/input/trackpad"
+				},
+				{
+					"inputs": {
+						"north": {
+							"output": "/actions/set1/in/boolact"
+						}
+					},
+					"mode": "dpad",
+					"path": "/user/hand/left/input/trackpad",
+					"parameters": {
+						"sub_mode": "click"
+					}
 				}
 			]
 		}

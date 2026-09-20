@@ -8,14 +8,15 @@ use crate::input::profiles::{DynInputPath, InputToXrPath};
 use crate::openxr_data::Hand;
 use glam::{EulerRot, Mat4, Quat, Vec3};
 
-pub struct OculusTouch;
+pub struct MetaTouchPlus;
 
-impl InteractionProfile for OculusTouch {
+impl InteractionProfile for MetaTouchPlus {
     type LegalPaths = legal_paths![
         Both::<
             (Squeeze, Value),
             (Trigger, Value),
             (Trigger, Touch),
+            (Trigger, Force),
             (Thumbstick, ()),
             (Thumbstick, Click),
             (Thumbstick, Touch),
@@ -28,13 +29,13 @@ impl InteractionProfile for OculusTouch {
         use openvr::EVRButtonId::*;
         static DEVICE_PROPERTIES: ProfileProperties = ProfileProperties {
             model: Property::PerHand {
-                left: c"Oculus Quest2 (Left Controller)",
-                right: c"Oculus Quest2 (Right Controller)",
+                left: c"Oculus Quest3 (Left Controller)",
+                right: c"Oculus Quest3 (Right Controller)",
             },
             openvr_controller_type: c"oculus_touch",
             render_model_name: Property::PerHand {
-                left: c"oculus_quest2_controller_left",
-                right: c"oculus_quest2_controller_right",
+                left: c"oculus_quest_plus_controller_left",
+                right: c"oculus_quest_plus_controller_right",
             },
             registered_device_type: Property::PerHand {
                 left: c"oculus/WMHD315M3010GV_Controller_Left",
@@ -70,10 +71,10 @@ impl InteractionProfile for OculusTouch {
         }
     }
     fn profile_path() -> &'static str {
-        "/interaction_profiles/oculus/touch_controller"
+        "/interaction_profiles/meta/touch_controller_plus"
     }
-    fn has_required_extensions(_: &openxr::ExtensionSet) -> bool {
-        true
+    fn has_required_extensions(enabled_extensions: &openxr::ExtensionSet) -> bool {
+        enabled_extensions.meta_touch_controller_plus
     }
 
     fn legacy_bindings(c: &InputToXrPath<Self>) -> LegacyBindings {
@@ -147,7 +148,7 @@ impl InteractionProfile for OculusTouch {
 
 #[cfg(test)]
 mod tests {
-    use super::{InteractionProfile, OculusTouch};
+    use super::{InteractionProfile, MetaTouchPlus};
     use crate::input::tests::Fixture;
     use openxr as xr;
 
@@ -156,7 +157,7 @@ mod tests {
         let f = Fixture::new();
         f.load_actions(c"actions.json");
 
-        let path = OculusTouch::profile_path();
+        let path = MetaTouchPlus::profile_path();
         f.verify_bindings::<bool>(
             path,
             c"/actions/set1/in/boolact",

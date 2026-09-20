@@ -6,6 +6,9 @@ pub use monado_xdev::add_trackers;
 use crossbeam_utils::atomic::AtomicCell;
 use glam::{Affine3A, Quat, Vec3};
 use openxr_sys as xr;
+// Handle::{NULL, into_raw, from_raw} are trait items as of openxr-sys 0.13.
+// Imported anonymously to avoid clashing with our own Handle trait.
+use openxr_sys::Handle as _;
 use paste::paste;
 use slotmap::{DefaultKey, Key, KeyData, SlotMap};
 use std::collections::{HashMap, HashSet};
@@ -126,6 +129,14 @@ pub fn set_grip(session: xr::Session, path: UserPath, pose: xr::Posef) {
 pub fn set_aim(session: xr::Session, path: UserPath, pose: xr::Posef) {
     let session = session.to_handle().unwrap();
     get_hand_data(path, &session).aim_pose.store(pose);
+}
+
+#[track_caller]
+pub fn check_no_suggested_bindings(action: xr::Action, profile: xr::Path) -> bool {
+    let action = xr::Action::to_handle(action).unwrap();
+    let suggested = action.suggested.lock().unwrap();
+
+    suggested.get(&profile).is_none()
 }
 
 #[track_caller]
@@ -346,8 +357,8 @@ extern "system" fn enumerate_instance_extension_properties(
     properties: *mut xr::ExtensionProperties,
 ) -> xr::Result {
     assert!(layer_name.is_null());
-    unsafe { *property_count_output = 3 };
-    if property_capacity_input >= 3 {
+    unsafe { *property_count_output = 4 };
+    if property_capacity_input >= 4 {
         let props =
             unsafe { std::slice::from_raw_parts_mut(properties, property_capacity_input as usize) };
 
@@ -383,6 +394,17 @@ extern "system" fn enumerate_instance_extension_properties(
         let name =
             unsafe { std::slice::from_raw_parts(name.as_ptr() as *const c_char, name.len()) };
         props[2].extension_name[..name.len()].copy_from_slice(name);
+
+        props[3] = xr::ExtensionProperties {
+            ty: xr::ExtensionProperties::TYPE,
+            next: std::ptr::null_mut(),
+            extension_name: [0 as c_char; xr::MAX_EXTENSION_NAME_SIZE],
+            extension_version: 1,
+        };
+        let name = xr::META_TOUCH_CONTROLLER_PLUS_EXTENSION_NAME;
+        let name =
+            unsafe { std::slice::from_raw_parts(name.as_ptr() as *const c_char, name.len()) };
+        props[3].extension_name[..name.len()].copy_from_slice(name);
     }
     xr::Result::SUCCESS
 }

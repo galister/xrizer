@@ -1,6 +1,9 @@
-use super::{Input, PoseData, Profiles, WriteOnDrop};
+use super::{Input, PoseData, WriteOnDrop};
 use crate::{
-    input::{LoadedActions, ManifestLoadedActions},
+    input::{
+        LoadedActions, ManifestLoadedActions,
+        profiles::{self, RunWithProfile},
+    },
     openxr_data::{self},
 };
 use log::{debug, trace, warn};
@@ -47,25 +50,42 @@ impl<C: openxr_data::Compositor> Input<C> {
         );
         let input_data = &session_data.input_data;
 
-        for profile in Profiles::get().profiles_iter() {
-            const fn constrain<F>(f: F) -> F
-            where
-                F: for<'a> Fn(&'a str) -> xr::Path,
-            {
-                f
+        profiles::run_for_all_profiles(&mut Runner {
+            openxr: &self.openxr,
+            input_data,
+            legacy: &legacy,
+        });
+
+        struct Runner<'a, C: openxr_data::Compositor> {
+            openxr: &'a super::OpenXrData<C>,
+            input_data: &'a super::InputSessionData,
+            legacy: &'a LegacyActionData,
+        }
+
+        impl<C: openxr_data::Compositor> RunWithProfile for Runner<'_, C> {
+            fn run<P: super::InteractionProfile>(&mut self) {
+                if !P::has_required_extensions(&self.openxr.enabled_extensions) {
+                    return;
+                }
+
+                let conv = super::profiles::InputToXrPath::new(&self.openxr.instance);
+                let bindings = P::legacy_bindings(&conv);
+                self.openxr
+                    .instance
+                    .suggest_interaction_profile_bindings(
+                        self.openxr
+                            .instance
+                            .string_to_path(P::profile_path())
+                            .unwrap(),
+                        &bindings
+                            .into_iter(
+                                &self.legacy.actions,
+                                self.input_data.pose_data.get().unwrap(),
+                            )
+                            .collect::<Vec<_>>(),
+                    )
+                    .unwrap();
             }
-            let stp = constrain(|s| self.openxr.instance.string_to_path(s).unwrap());
-            let bindings = profile.legacy_bindings(&stp);
-            let profile = stp(profile.profile_path());
-            self.openxr
-                .instance
-                .suggest_interaction_profile_bindings(
-                    profile,
-                    &bindings
-                        .into_iter(&legacy.actions, input_data.pose_data.get().unwrap())
-                        .collect::<Vec<_>>(),
-                )
-                .unwrap();
         }
 
         let pose_set = &input_data.pose_data.get().unwrap().set;
@@ -480,8 +500,8 @@ mod tests {
         let mut f = Fixture::new();
         f.input.openxr.restart_session();
 
-        f.set_interaction_profile(&Knuckles, LeftHand);
-        f.set_interaction_profile(&Knuckles, RightHand);
+        f.set_interaction_profile::<Knuckles>(LeftHand);
+        f.set_interaction_profile::<Knuckles>(RightHand);
         f.input.frame_start_update();
         f.input.openxr.poll_events();
         let action = get_action(
@@ -697,8 +717,8 @@ mod tests {
 
         f.input.openxr.restart_session();
 
-        f.set_interaction_profile(&SimpleController, fakexr::UserPath::LeftHand);
-        f.set_interaction_profile(&SimpleController, fakexr::UserPath::RightHand);
+        f.set_interaction_profile::<SimpleController>(fakexr::UserPath::LeftHand);
+        f.set_interaction_profile::<SimpleController>(fakexr::UserPath::RightHand);
         f.input.frame_start_update();
         f.input.openxr.poll_events();
 
@@ -724,8 +744,8 @@ mod tests {
         use fakexr::UserPath::*;
         let mut f = Fixture::new();
         f.input.openxr.restart_session();
-        f.set_interaction_profile(&SimpleController, LeftHand);
-        f.set_interaction_profile(&SimpleController, RightHand);
+        f.set_interaction_profile::<SimpleController>(LeftHand);
+        f.set_interaction_profile::<SimpleController>(RightHand);
         f.input.frame_start_update();
         f.input.openxr.poll_events();
 
@@ -799,8 +819,8 @@ mod tests {
     fn legacy_haptic() {
         let mut f = Fixture::new();
         f.input.openxr.restart_session();
-        f.set_interaction_profile(&SimpleController, fakexr::UserPath::LeftHand);
-        f.set_interaction_profile(&SimpleController, fakexr::UserPath::RightHand);
+        f.set_interaction_profile::<SimpleController>(fakexr::UserPath::LeftHand);
+        f.set_interaction_profile::<SimpleController>(fakexr::UserPath::RightHand);
         f.input.openxr.poll_events();
         f.input.frame_start_update();
 
@@ -845,8 +865,8 @@ mod tests {
         let mut f = Fixture::new();
         f.load_actions(c"actions.json");
         f.input.openxr.restart_session();
-        f.set_interaction_profile(&SimpleController, fakexr::UserPath::LeftHand);
-        f.set_interaction_profile(&SimpleController, fakexr::UserPath::RightHand);
+        f.set_interaction_profile::<SimpleController>(fakexr::UserPath::LeftHand);
+        f.set_interaction_profile::<SimpleController>(fakexr::UserPath::RightHand);
         f.input.openxr.poll_events();
         f.input.frame_start_update();
 

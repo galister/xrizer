@@ -90,6 +90,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let header_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("headers");
     let headers = [
+        version!(2, 15, 6),
         version!(2, 12, 14),
         version!(2, 5, 1),
         version!(2, 0, 10),
@@ -253,14 +254,15 @@ fn verify_fields_are_identical<'a, T>(
 ) where
     T: IntoIterator<Item = &'a syn::Field>,
 {
-    for (existing_field, new_field) in existing.into_iter().zip(new.into_iter()) {
+    for (existing_field, new_field) in existing.into_iter().zip(new) {
         if existing_field.ident != new_field.ident {
             let idents = [
                 existing_field.ident.as_ref().unwrap().to_string(),
                 new_field.ident.as_ref().unwrap().to_string(),
             ];
             assert!(
-                idents.contains(&"repeatCount".into()) && idents.contains(&"unused".into()),
+                idents.contains(&"repeatCount".into()) && idents.contains(&"unused".into())
+                    || idents[1] == (idents[0].clone() + "_deprecated"),
                 "Non-allowed differently named fields in {ident} (left = {:?} from {existing_mod}, right = {:?} from {new_mod})",
                 existing_field.ident,
                 new_field.ident
@@ -898,9 +900,9 @@ fn process_and_versionify_types(tokens: TokenStream) -> String {
         }
     }
 
-    let versioned = versioned.into_iter().flat_map(|(_, mut versions)| {
+    let versioned = versioned.into_values().flat_map(|mut versions| {
         // reverse sort - start with highest interface version and go down
-        versions.sort_by(|a, b| b.version.cmp(&a.version));
+        versions.sort_by_key(|a| std::cmp::Reverse(a.version));
 
         let mut items = Vec::new();
         let mut prev_sigs = Vec::new();
