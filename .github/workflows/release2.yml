@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            libclang-dev \
+            cmake \
+            ninja-build \
+            pkg-config \
+            curl \
+            git \
+            zip \
+            glslc \
+            libvulkan-dev \
+            libopenxr-dev \
+            libopenvr-dev \
+            libx11-xcb-dev
+
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --profile minimal --default-toolchain stable
+          fi
+
+          source "$HOME/.cargo/env" 2>/dev/null || true
+          rustup update stable
+          rustup default stable
+
+          rustc --version
+          cargo --version
+          glslc --version
+
+      - name: Build
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cargo xbuild --release --features static-openxr --locked
+
+      - name: Package
+        id: package
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          PACKAGE="xrizer-${GITHUB_REF_NAME}-linux-x86_64.zip"
+
+          rm -rf dist
+          mkdir -p dist/package/bin/linux64
+
+          cp target/release/libxrizer.so \
+            dist/package/libxrizer.so
+
+          cp target/release/bin/version.txt \
+            dist/package/bin/version.txt
+
+          ln -s ../../libxrizer.so \
+            dist/package/bin/linux64/vrclient.so
+
+          (
+            cd dist/package
+            zip -yr "../${PACKAGE}" .
+          )
+
+          echo "artifact=dist/${PACKAGE}" >> "$GITHUB_OUTPUT"
+
+          # Verify the symlink remains relative in the package tree.
+          test "$(readlink dist/package/bin/linux64/vrclient.so)" = "../../libxrizer.so"
+
+      - name: Create GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT: ${{ steps.package.outputs.artifact }}
+        run: |
+          set -euxo pipefail
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$ARTIFACT" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              "$ARTIFACT" \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi
